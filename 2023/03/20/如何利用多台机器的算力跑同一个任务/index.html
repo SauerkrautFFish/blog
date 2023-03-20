@@ -1,0 +1,283 @@
+<!DOCTYPE html><html class="appearance-auto" lang="en"><head><meta charset="UTF-8"><title>如何利用多台机器算力跑同一个任务</title><meta name="description" content="May the Force be with you"><meta name="viewport" content="width=device-width, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, initial-scale=1"><!-- Google Analytics --><!-- End Google Analytics -->
+<!-- Baidu Analytics --><!-- End Baidu Analytics --><link rel="icon" href="/blog/images/favicon.ico"><link rel="stylesheet" href="/blog/style/common/bulma.css"><link rel="stylesheet" href="/blog/style/base.css"><link rel="stylesheet" href="/blog/style/common/helper.css"><script src="/blog/js/common.js"></script><link rel="stylesheet" href="/blog/style/post.css"><link rel="stylesheet" href="/blog/style/themes/highlight-theme-light.css"><link rel="stylesheet" href="/blog/style/common/jquery.fancybox.min.css"><script src="/blog/js/highlight.pack.js"></script><meta name="description" content="我先在开头做一个总结，表达我最终要做的事情和最终环境是如何的，然后我会一步步说明我是如何搭建。
+要做的事情尝试如何使用多台机器的算力共同跑一个CPU密集型或者GPU密集型的任务。这里以CPU密集型为例子。
+在多台机器搭建MPI环境，构建MPI集群共同跑1亿个数据的快排任务，并且对机器的各种指标（如CPU，内存，磁盘，网络等）做可视化监控。
+最终环境我这里选择的云平台是Microsoft Azure，使用两台机器做实验，两台操作系统信息一致为：Linux (ubuntu 18.04) Standard B2ms (2 vcpu，8 GiB 内存)，两台虚拟机实现了ssh免密互通，通过nfs在其中一台虚拟机创建共享空间，让另一个虚拟机可以远程挂载访问，两台虚拟机通过rpc进行通信，两台虚拟机都配置好了可以运行M.."><meta name="generator" content="Hexo 6.3.0"></head><body class="is-flex is-flex-direction-column"><header class="header-widget is-flex-shrink-0 is-hidden-mobile"><div class="container is-fullhd is-flex is-justify-content-space-between is-align-items-center is-full-height"><section class="is-hidden-mobile is-flex-shrink-0"><h2><a href="/blog/">Haojen's blog</a></h2></section><h3 class="is-hidden-mobile is-family-serif is-full-height is-flex is-align-items-center is-flex-shrink-0"><div class="is-full-height" id="postTopic"><p class="is-full-height is-flex-shrink-0 is-flex is-align-items-center is-justify-content-center">如何利用多台机器算力跑同一个任务</p><p class="is-full-height is-flex-shrink-0 is-flex is-align-items-center is-justify-content-center">Click back to the top</p></div></h3><aside class="is-flex-shrink-0"><h3 class="is-inline-block"><a href="/blog/">blog</a></h3><h3 class="is-inline-block"><a href="/blog/about">About</a></h3><h3 class="is-inline-block"><a href="/blog/archives">Archives</a></h3></aside></div></header><header class="is-flex header-widget is-flex-shrink-0 is-align-items-center is-justify-content-center is-hidden-tablet"><h3 class="is-inline-block"><a href="/blog/">blog</a></h3><h3 class="is-inline-block"><a href="/blog/about">About</a></h3><h3 class="is-inline-block"><a href="/blog/archives">Archives</a></h3></header><main><main class="container is-max-widescreen content section post-page pt-4 px-4"><div class="columns is-flex-desktop is-justify-content-center is-flex-direction-row-reverse"><div class="column is-3 is-hidden-mobile"><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#%E8%A6%81%E5%81%9A%E7%9A%84%E4%BA%8B%E6%83%85"><span class="toc-text">要做的事情</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E6%9C%80%E7%BB%88%E7%8E%AF%E5%A2%83"><span class="toc-text">最终环境</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E5%A6%82%E4%BD%95%E9%85%8D%E7%BD%AE%EF%BC%9F"><span class="toc-text">如何配置？</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#1-%E8%99%9A%E6%8B%9F%E6%9C%BA%E5%88%9D%E5%A7%8B%E5%8C%96"><span class="toc-text">1.虚拟机初始化</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#2-%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E4%B8%A4%E4%B8%AA%E8%99%9A%E6%8B%9F%E6%9C%BA%E7%9A%84%E5%85%8D%E5%AF%86%E7%99%BB%E5%BD%95"><span class="toc-text">2.如何实现两个虚拟机的免密登录</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-mpi%E9%9B%86%E7%BE%A4%E7%8E%AF%E5%A2%83%E6%90%AD%E5%BB%BA"><span class="toc-text">3.mpi集群环境搭建</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#4-nfs%E5%92%8Crpcbind%E6%90%AD%E5%BB%BA"><span class="toc-text">4.nfs和rpcbind搭建</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#5-node-exporter"><span class="toc-text">5.node_exporter</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#6-prometheus"><span class="toc-text">6.prometheus</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#7-Grafana"><span class="toc-text">7.Grafana</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E5%AE%9E%E9%AA%8C%E8%AE%BE%E8%AE%A1"><span class="toc-text">实验设计</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E5%AE%9E%E9%AA%8C%E7%BB%93%E6%9E%9C"><span class="toc-text">实验结果</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%8D%95%E5%8F%B0"><span class="toc-text">单台</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%A4%9A%E5%8F%B0"><span class="toc-text">多台</span></a></li></ol></li></ol></div><div class="column is-9"><header class="my-4"></header><h1 class="mt-0 mb-1 is-family-serif" id="postTitle">如何利用多台机器算力跑同一个任务</h1><time class="has-text-grey" datetime="2023-03-20T14:50:42.000Z">2023-03-20</time><article class="mt-2 post-content"><p>我先在开头做一个总结，表达我最终要做的事情和最终环境是如何的，然后我会一步步说明我是如何搭建。</p>
+<h1 id="要做的事情"><a href="#要做的事情" class="headerlink" title="要做的事情"></a>要做的事情</h1><p>尝试如何使用<strong>多台机器的算力</strong>共同跑一个CPU密集型或者GPU密集型的任务。这里以CPU密集型为例子。</p>
+<p>在多台机器搭建MPI环境，构建<strong>MPI集群</strong>共同跑<strong>1亿个数据的快排任务</strong>，并且对机器的各种指标（如CPU，内存，磁盘，网络等）做<strong>可视化监控</strong>。</p>
+<h1 id="最终环境"><a href="#最终环境" class="headerlink" title="最终环境"></a>最终环境</h1><p>我这里选择的云平台是Microsoft Azure，使用<strong>两台机器做实验</strong>，两台操作系统信息一致为：Linux (<strong>ubuntu 18.04</strong>) Standard B2ms (2 vcpu，8 GiB 内存)，两台虚拟机实现了<strong>ssh免密互通</strong>，通过<strong>nfs</strong>在其中一台虚拟机创建共享空间，让另一个虚拟机可以<strong>远程挂载</strong>访问，两台虚拟机<strong>通过rpc进行通信</strong>，两台虚拟机都配置好了可以运行<strong>MPI的环境</strong>，配置好了<strong>prometheus+node_exporter+grafana</strong>，每个服务所需要的<strong>端口</strong>都已经通过azure安全组打开。</p>
+<h1 id="如何配置？"><a href="#如何配置？" class="headerlink" title="如何配置？"></a>如何配置？</h1><h2 id="1-虚拟机初始化"><a href="#1-虚拟机初始化" class="headerlink" title="1.虚拟机初始化"></a>1.虚拟机初始化</h2><p>我选用了Microsoft Azure的产品，订阅了UoL-Teaching-SOC-MCC后，找到了给我分配的资源组：* uol_feps_soc_comp5850m_xxxxxx。（<strong>学校给我分配的，大家可能要自己去购买使用</strong>）我在上面构建了两台虚拟机，一台叫做<strong>jhvm</strong>（51.11.167.xx），另一台叫做<strong>jhvm2</strong>（20.254.126.xx），同时在两台虚拟机上我都创建了同样的<strong>用户名mppi</strong>，为了保证<strong>登录的安全性</strong>，我选择<strong>使用密钥进行登录</strong>，即：</p>
+<pre><code>ssh -i jhvm_key.pem mppi@51.11.167.xx
+</code></pre>
+<p>即公钥会保存在服务器上，私钥则在本地，在创建虚拟机的时候，Azure会问你是否使用非对称密钥进行登录，选择是后，即可下载.pem文件。</p>
+<h2 id="2-如何实现两个虚拟机的免密登录"><a href="#2-如何实现两个虚拟机的免密登录" class="headerlink" title="2.如何实现两个虚拟机的免密登录"></a>2.如何实现两个虚拟机的免密登录</h2><p>首先为了<strong>不再使用ip而是使用昵称</strong>，我在&#x2F;etc&#x2F;hosts上增加了：</p>
+<pre><code class="bash">51.11.167.xx node1
+20.254.126.xx node2
+</code></pre>
+<p>&#x2F;etc&#x2F;ssh&#x2F;sshd_config中设置</p>
+<pre><code class="bash">PubkeyAuthentication yes
+</code></pre>
+<p>确保开启了密钥登录。对node1和node2节点的<strong>家目录设置权限为700</strong>，否则可能会存在<strong>免密登录失败</strong>的问题，在node1上，我通过</p>
+<pre><code class="bash">ssh-keygen -t rsa
+</code></pre>
+<p>生成公钥私钥到.ssh目录，把**.ssh目录权限设置为600<strong>，主要</strong>不能有写权限**，不然可能会免密失败，然后通过</p>
+<pre><code class="bash">ssh-copy-id -i .ssh/id_rsa.pub mppi@node1
+ssh-copy-id -i .ssh/id_rsa.pub mppi@node2
+</code></pre>
+<p>命令后，输入了node2用户mppi的密码，把公钥放到了node2的.ssh&#x2F;authorized_keys文件中，同时再使用<strong>scp命令把私钥也复制给node2节点</strong>(node1也要，因为他会放进authorized_keys文件中，让node2也能免密登录node1)。</p>
+<pre><code class="bash">scp .ssh/id_rsa node2:/home/mppi/.ssh
+</code></pre>
+<p>至此，node1和node2都同时有了公钥和私钥，我们输入ssh node2命令，即可免密登录进node2，node2使用ssh node1也能免密登录进node1。</p>
+<h2 id="3-mpi集群环境搭建"><a href="#3-mpi集群环境搭建" class="headerlink" title="3.mpi集群环境搭建"></a>3.mpi集群环境搭建</h2><p>切换到root权限，我们执行</p>
+<pre><code class="bash">apt-get install mpich
+</code></pre>
+<p>命令即可下载mpi环境。把qsort.c放到&#x2F;home&#x2F;mppi&#x2F;mpi_share里。<strong>这里不会对mpi原理过多讲解，主要还是如何使用工具搭建好要的环境。</strong>感兴趣的话大家可以google或者baidu等自行搜索。这里的代码主要作用是获取Input.txt文件的内容：先获取文件的第一个数字n，代表有n个数，然后获取n个数，即我随机生成的n个数，然后会把排序好的数据放到output.txt中，input.txt和output.txt名字可以通过参数指定。mpi可以通过-n指定cpu个数。</p>
+<p>对mpiexec(mpirun)感兴趣的同学，可以通过man mpiexec(mpirun)去查看说明文档。</p>
+<pre><code class="c++">/*
+   qsort.c - Parallel sorting algorithm based on quicksort
+
+   Original code by Hans-Wolfgang Loidl
+   Heriot-Watt University, Edinburgh
+
+   Adapted by Karim Djemame
+   Execution time includes input, processing and output
+
+   February 2023
+
+   compile: mpicc -Wall -o qsort qsort.c
+   run:     mpirun -np num_procs qsort in_file out_file
+
+   num_procs: number of processors
+   in_file: input file to sort
+   out_file: result file
+
+   Example: on a single machine:
+   mpirun -np 2 qsort input.txt output.txt
+*/
+
+#include &lt;stdio.h&gt;
+#include &lt;stdlib.h&gt;
+#include &lt;mpi.h&gt;
+#include &lt;time.h&gt;
+
+double startTime;
+
+/* swap entries in array v at positions i and j; used by quicksort */
+
+static inline /* this improves performance; Exercise: by how much? */
+void swap(int *v, int i, int j) &#123;
+    int t = v[i];
+    v[i] = v[j];
+    v[j] = t;
+&#125;
+
+/* (quick) sort slice of array v; slice starts at s and is of length n */
+void quicksort(int *v, int s, int n) &#123;
+    int x, p, i;
+    // base case?
+    if (n &lt;= 1)
+        return;
+    // pick pivot and swap with first element
+    x = v[s + n / 2];
+    swap(v, s, s + n / 2);
+    // partition slice starting at s+1
+    p = s;
+    for (i = s + 1; i &lt; s + n; i++)
+        if (v[i] &lt; x) &#123;
+            p++;
+            swap(v, i, p);
+        &#125;
+    // swap pivot into place
+    swap(v, s, p);
+    // recurse into partition
+    quicksort(v, s, p - s);
+    quicksort(v, p + 1, s + n - p - 1);
+&#125;
+
+
+/* merge two sorted arrays v1, v2 of lengths n1, n2, respectively */
+int *merge(int *v1, int n1, int *v2, int n2) &#123;
+    int *result = (int *)malloc((n1 + n2) * sizeof(int));
+    int i = 0;
+    int j = 0;
+    int k;
+    for (k = 0; k &lt; n1 + n2; k++) &#123;
+        if (i &gt;= n1) &#123;
+            result[k] = v2[j];
+            j++;
+        &#125; else if (j &gt;= n2) &#123;
+            result[k] = v1[i];
+            i++;
+        &#125; else if (v1[i] &lt; v2[j]) &#123; // indices in bounds as i &lt; n1 &amp;&amp; j &lt; n2
+            result[k] = v1[i];
+            i++;
+        &#125; else &#123; // v2[j] &lt;= v1[i]
+            result[k] = v2[j];
+            j++;
+        &#125;
+    &#125;
+    return result;
+&#125;
+
+int main(int argc, char **argv) &#123;
+    int n;
+    int *data = NULL;
+    int c, s;
+    int *chunk;
+    int o;
+    int *other;
+    int step;
+    int p, id;
+    MPI_Status status;
+    double elapsed_time;
+    FILE *file = NULL;
+    int i;
+
+    if (argc != 3) &#123;
+        fprintf(stderr, &quot;Usage: mpirun -np &lt;num_procs&gt; %s &lt;in_file&gt; &lt;out_file&gt;\n&quot;, argv[0]);
+        exit(1);
+    &#125;
+
+    MPI_Init(&amp;argc, &amp;argv);
+    MPI_Comm_size(MPI_COMM_WORLD, &amp;p);
+    MPI_Comm_rank(MPI_COMM_WORLD, &amp;id);
+    char processorname[100];
+    int namelen;
+    MPI_Get_processor_name(processorname, &amp;namelen);
+    printf(&quot;processor %i of %i running on machine %s\n&quot;, id, p, processorname);
+    MPI_Barrier(MPI_COMM_WORLD);
+    elapsed_time = - MPI_Wtime();
+
+    if (id == 0) &#123;
+        // read size of data
+        file = fopen(argv[1], &quot;r&quot;);
+        fscanf(file, &quot;%d&quot;, &amp;n);
+        // compute chunk size
+        c = (n % p != 0) ? n / p + 1 : n / p;
+        // read data from file
+        data = (int *)malloc(p * c * sizeof(int));
+        for (i = 0; i &lt; n; i++)
+            fscanf(file, &quot;%d&quot;, &amp;(data[i]));
+        fclose(file);
+        // pad data with 0 -- doesn&#39;t matter
+        for (i = n; i &lt; p * c; i++)
+            data[i] = 0;
+    &#125;
+
+    // start the timer
+//  MPI_Barrier(MPI_COMM_WORLD);
+//  elapsed_time = - MPI_Wtime();
+
+    // broadcast size
+    MPI_Bcast(&amp;n, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+    // compute chunk size
+    c = (n % p != 0) ? n / p + 1 : n / p;
+
+    // scatter data
+    chunk = (int *)malloc(c * sizeof(int));
+    MPI_Scatter(data, c, MPI_INT, chunk, c, MPI_INT, 0, MPI_COMM_WORLD);
+    free(data);
+    data = NULL;
+
+    // compute size of own chunk and sort it
+    s = (n &gt;= c * (id + 1)) ? c : n - c * id;
+    quicksort(chunk, 0, s);
+
+    // up to log_2 p merge steps
+
+    for (step = 1; step &lt; p; step = 2 * step) &#123;
+        if (id % (2 * step) != 0) &#123;
+            // id is no multiple of 2*step: send chunk to id-step and exit loop
+            MPI_Send(chunk, s, MPI_INT, id - step, 0, MPI_COMM_WORLD);
+            break;
+        &#125;
+        // id is multiple of 2*step: merge in chunk from id+step (if it exists)
+        if (id + step &lt; p) &#123;
+            // compute size of chunk to be received
+            o = (n &gt;= c * (id + 2 * step)) ? c * step : n - c * (id + step);
+            // receive other chunk
+            other = (int *)malloc(o * sizeof(int));
+            MPI_Recv(other, o, MPI_INT, id + step, 0, MPI_COMM_WORLD, &amp;status);
+            // merge and free memory
+            data = merge(chunk, s, other, o);
+            free(chunk);
+            free(other);
+            chunk = data;
+            s = s + o;
+        &#125;
+    &#125;
+
+    // stop the timer
+// elapsed_time += MPI_Wtime();
+
+    // write sorted data to out file and print out timer
+
+    if (id == 0) &#123;
+        file = fopen(argv[2], &quot;w&quot;);
+        fprintf(file, &quot;%d\n&quot;, s);   // assert (s == n)
+        for (i = 0; i &lt; s; i++)
+            fprintf(file, &quot;%d\n&quot;, chunk[i]);
+        fclose(file);
+
+// stop the timer
+        elapsed_time += MPI_Wtime();
+        printf(&quot;Quicksort %d ints on %d procs: %f secs\n&quot;, n, p, elapsed_time);
+    &#125;
+
+    MPI_Finalize();
+    return 0;
+&#125;
+</code></pre>
+<p>同时在<strong>同一个目录下添加mpi_config文件</strong>，输入(即node1和node2都开启两个cpu去跑的意思)</p>
+<pre><code class="bash">node1:2
+node2:2
+</code></pre>
+<p>然后为了测试我们mpi集群是否搭建成功，我们按照qsort.c文件的入参要求，设置了input.txt和output.txt，其中input.txt里我放了1 million个数字做测试，第一个代表要排序数字的个数n，后面跟着n个数。然后为了测试是否是成功运行在两台机器上，把qsort.c通过命令编译成qsort：</p>
+<pre><code class="bash">mpicc qsort.c -o qsort
+</code></pre>
+<p>通过mpiexec -n 4 -f mpi_config .&#x2F;qsort 1_million.txt 1_output.txt命令执行后，通过输出发现jhvm和jhvm2都分别有2个进程在做运算，说明我的环境搭建成功。</p>
+<p><img src="/blog/blog/2023/03/20/%E5%A6%82%E4%BD%95%E5%88%A9%E7%94%A8%E5%A4%9A%E5%8F%B0%E6%9C%BA%E5%99%A8%E7%9A%84%E7%AE%97%E5%8A%9B%E8%B7%91%E5%90%8C%E4%B8%80%E4%B8%AA%E4%BB%BB%E5%8A%A1/image-20230320111024714-16793240753236.png" alt="image-20230320111024714"></p>
+<p>失败的同学可能是mpi需要的端口没开。</p>
+<h2 id="4-nfs和rpcbind搭建"><a href="#4-nfs和rpcbind搭建" class="headerlink" title="4.nfs和rpcbind搭建"></a>4.nfs和rpcbind搭建</h2><p>NFS(Network File System)主要功能是通过网络来做文件存储，使用<strong>NFS可以实现多台服务器之间数据共享</strong>，NFS之间<strong>通过rpc进行通信</strong>。这里同样不会对原理过多讲解，主要还是如何使用工具搭建好要的环境。感兴趣的话大家可以google或者baidu等自行搜索。</p>
+<p>通过</p>
+<pre><code class="bash">apt-get install nfs-kernel-server
+apt-get install rpcbind
+# 失败的同学可以先执行apt-get update, 刷新源索引列表
+</code></pre>
+<p>命令下载好nfs共享目录的工具和rpc通信方式（启动的时候需要先启动rpc，因为nfs需要先找到rpc去绑定），我选择使用node1节点作为主节点，修改&#x2F;etc&#x2F;exports文件，添加配置：</p>
+<pre><code class="bash">/home/mppi/mpi_share node1(rw,sync,no_root_squash,no_subtree_check)
+/home/mppi/mpi_share node2(rw,sync,no_root_squash,no_subtree_check)
+# 可参考 https://blog.csdn.net/weixin_45361475/article/details/117754118
+# 可参考 http://events.jianshu.io/p/3035c7636d23
+</code></pre>
+<p>里面的地址就是要共享目录的位置，然后我们分别在node1和node2的这个位置去创建文件夹mpi_share，然后<strong>启动node1节点的rpc服务</strong>，<strong>再启动</strong>nfs-server服务，node2也需要启动rpc并通过</p>
+<pre><code class="bash">mount -t nfs node1:/home/mppi/mpi_share
+</code></pre>
+<p>命令挂载到node1同位置目录上。然后我尝试在node1节点创建了一个文件，在node2同位置路径下也出现了相同文件，说明我搭建成功了，我们以后有任何要计算的任务，可以只把文件复制到node1节点上即可，不需要手动的去复制到node2，或者集群扩充后的node3等等，非常的方便。</p>
+<p><strong>不使用nfs+rpc其实mpi也能跑</strong>，但是需要自己手动复制文件到node2节点，用mpi跑的时候直接**-hosts**即可：</p>
+<pre><code class="bash">mpirun -n 4 -hosts node1:2,node2:2 ./qsort input.txt output.txt
+</code></pre>
+<h2 id="5-node-exporter"><a href="#5-node-exporter" class="headerlink" title="5.node_exporter"></a>5.node_exporter</h2><p>通过教程了解并且搭建好node_exporter, prometheus, Grafana，这三者的关系是：<strong>prometheus是可以通过node_exporter获取到多个机器的各种指标信息，Grafana是对prometheus的可视化。</strong></p>
+<p>搭建教程：<a target="_blank" rel="noopener" href="https://medium.com/devops-dudes/install-prometheus-on-ubuntu-18-04-a51602c6256b">https://medium.com/devops-dudes/install-prometheus-on-ubuntu-18-04-a51602c6256b</a></p>
+<p>通过教程在整合过程中，我发现教程给的node_exporter版本号太低了，所以我后面自己重新下载了0.18.1版本的node_exporter（因为在grafana很多现成的dashboard都需要node_exporter版本0.18或以上），随后跟着教程把node_exporter二进制文件放到&#x2F;usr&#x2F;local&#x2F;bin里管理，同时为node_exporter构建一个不可登录的用户去管理，然后在创建&#x2F;etc&#x2F;systemd&#x2F;system&#x2F;node_exporter.service，配置好unit，service和install后，重新加载守护进程，运行node_exporter即可。</p>
+<h2 id="6-prometheus"><a href="#6-prometheus" class="headerlink" title="6.prometheus"></a>6.prometheus</h2><p>也是通过给的教程，安装了2.1.0版本的prometheus，同样也是把二进制文件放到&#x2F;usr&#x2F;local&#x2F;bin里，为prometheus创建一些数据目录：&#x2F;etc&#x2F;prometheus &#x2F;var&#x2F;lib&#x2F;prometheus，把一些配置文件，像consoles或者console_libraries等放到&#x2F;etc&#x2F;prometheus里。</p>
+<p>添加prometheus的配置文件：&#x2F;etc&#x2F;prometheus&#x2F;prometheus.yml，设置抓取速率等，配置job_name和指标可用的端口号，为prometheus也创建一个不可登录的账号进行管理，并修改权限，以免被修改。随后也创建prometheus.service配置好unit，service和install，重新加载systemd，然后运行prometheus即可。通过ip:9090成功显示网页，环境成功搭建。</p>
+<h2 id="7-Grafana"><a href="#7-Grafana" class="headerlink" title="7.Grafana"></a>7.Grafana</h2><p>这里和node_exporter一样，我没有使用教程给的版本号，而是使用的9.2.3版本，因为5.0.4实在太老了，很多dashboard不能用。解压后root下通过systemctl daemon-reload &amp;&amp; systemctl 启用 grafana-server &amp;&amp; systemctl start grafana-server.service即可。通过url：ip:3000有dashboard界面，我成功搭建了grafana。在grafana指定了data sources后，输入了对应的ip:9090，并且我在 <a target="_blank" rel="noopener" href="https://grafana.com/grafana/dashboards/?dataSource=prometheus">https://grafana.com/grafana/dashboards/?dataSource=prometheus</a> 找到了一个非常合适的、同时也是非常流行的dashboard：node exporter full，可以可视化主机上很多的性能指标，比如cpu、内存、磁盘、网络等等。配置好后即可显示vm上的各项指标。</p>
+<h1 id="实验设计"><a href="#实验设计" class="headerlink" title="实验设计"></a>实验设计</h1><p>我会分为两个部分，第一个部分则是最为简单的<strong>单个虚拟机情况</strong>，第二个则是<strong>双虚拟机集群</strong>情况。</p>
+<p>我会分别尝试单机开启2，4，8个进程去跑100万、500万、1000万和2000万的快排数据，也就是说会有3x4&#x3D;12个输出。比如说2个进程的时候跑100万、500万、1000万和2000万的随机生成数据。</p>
+<p>生成数据的原则：当要生成100万数据的时候，我随机生成的范围为0-200万，跑500万、1000万和2000万数据的时候，随机的范围则和他们的数据量大小相等。</p>
+<p>单机部分我会根据本虚拟机cpu个数，和开启的进程个数，快排算法跑完时间做对比才考，并且会通过grafana可视化cpu、磁盘、内存的情况，做出分析和总结。</p>
+<p>在第二个集群跑快排的部分，我同样会有12个输出，3种不同的进程数量尝试4种不同数量大小的快排。同样会去<strong>根据两边cpu的总个数，一共开启的进程数，通过grafana去查看cpu、内存、磁盘去思考+总结</strong>。</p>
+<h1 id="实验结果"><a href="#实验结果" class="headerlink" title="实验结果"></a>实验结果</h1><h2 id="单台"><a href="#单台" class="headerlink" title="单台"></a>单台</h2><p>在一台具有2cpu的虚拟机上，我们尝试在不同数量的进程下运行100万、500万、1000万和2000万个随机数的数据大小。我们发现，只有当<strong>CPU数量&#x3D;进程数量时，快速排序的效率最高</strong>，并且已经验证了计算密集型工作与CPU之间的关系是平等的，效率更高。我们还注意到，只有在运行数千万数据时，内存才会略有波动。如果不使用mpi等高效的流程协作工具，也不使用快速排序等高效算法，那么内存使用和CPU使用将更加明显。一个是因为CPU需要很长时间，另一个是由于数千万的数据本身已经是数百兆字节。</p>
+<p><img src="/blog/blog/2023/03/20/%E5%A6%82%E4%BD%95%E5%88%A9%E7%94%A8%E5%A4%9A%E5%8F%B0%E6%9C%BA%E5%99%A8%E7%9A%84%E7%AE%97%E5%8A%9B%E8%B7%91%E5%90%8C%E4%B8%80%E4%B8%AA%E4%BB%BB%E5%8A%A1/image-20230320112625490-16793240545184.png" alt="image-20230320112625490"></p>
+<p>node1 grafana:</p>
+<p><img src="/blog/blog/2023/03/20/%E5%A6%82%E4%BD%95%E5%88%A9%E7%94%A8%E5%A4%9A%E5%8F%B0%E6%9C%BA%E5%99%A8%E7%9A%84%E7%AE%97%E5%8A%9B%E8%B7%91%E5%90%8C%E4%B8%80%E4%B8%AA%E4%BB%BB%E5%8A%A1/image-20230320112631610-16793240545195.png" alt="image-20230320112631610"></p>
+<p>跑2000万数据，单台虚拟机的cpu飙升到60%多。</p>
+<h2 id="多台"><a href="#多台" class="headerlink" title="多台"></a>多台</h2><p>事实上，得出的结论与单个虚拟机的结论相似。接下来，我将重点介绍与单个虚拟机报告的不同之处。因为我们使用一个集群（两台机器）来运行快速排序算法，所以使用了这两台机器的所有CPU，从而增强了计算能力，而且我们还可以发现，<strong>当使用2cpu&#x2F;每台vm时，集群状态所需的计算时间更少</strong>，这也意味着我们的集群可以充分利用每个vm的资源来分配操作，对于一些需要复杂操作并且可以划分为子操作的任务来说，这无疑是个好消息。</p>
+<p><img src="/blog/blog/2023/03/20/%E5%A6%82%E4%BD%95%E5%88%A9%E7%94%A8%E5%A4%9A%E5%8F%B0%E6%9C%BA%E5%99%A8%E7%9A%84%E7%AE%97%E5%8A%9B%E8%B7%91%E5%90%8C%E4%B8%80%E4%B8%AA%E4%BB%BB%E5%8A%A1/image-20230320113005514-16793240386573.png" alt="image-20230320113005514"></p>
+<p>node1 grafana:</p>
+<p><img src="/blog/blog/2023/03/20/%E5%A6%82%E4%BD%95%E5%88%A9%E7%94%A8%E5%A4%9A%E5%8F%B0%E6%9C%BA%E5%99%A8%E7%9A%84%E7%AE%97%E5%8A%9B%E8%B7%91%E5%90%8C%E4%B8%80%E4%B8%AA%E4%BB%BB%E5%8A%A1/image-20230320112806222-16793240204801.png" alt="image-20230320112806222"></p>
+<p>node2 grafana:</p>
+<p><img src="/blog/blog/2023/03/20/%E5%A6%82%E4%BD%95%E5%88%A9%E7%94%A8%E5%A4%9A%E5%8F%B0%E6%9C%BA%E5%99%A8%E7%9A%84%E7%AE%97%E5%8A%9B%E8%B7%91%E5%90%8C%E4%B8%80%E4%B8%AA%E4%BB%BB%E5%8A%A1/image-20230320112811804-16793240204802.png" alt="image-20230320112811804"></p>
+</article><section class="jump-container is-flex is-justify-content-space-between my-6"><!-- em is empty placeholder--><em></em></section><article class="mt-6 comment-container"><script async repo="Haojen/Claudia-theme-blog" src="https://utteranc.es/client.js" issue-term="pathname" theme="preferred-color-scheme"></script></article></div></div></main></main><footer class="is-flex is-flex-direction-column is-align-items-center is-flex-shrink-0 is-family-serif"><section class="sns-container"><a title="twitter" target="_blank" rel="noopener nofollow" href="//twitter.com//"><i class="iconfont icon-twitter"></i></a><!-- Github--><a title="github" target="_blank" rel="noopener nofollow" href="//github.com/haojen"><i class="iconfont icon-github"></i></a><!-- Ins--><a title="instagram" target="_blank" rel="noopener nofollow" href="//www.instagram.com//"><i class="iconfont icon-ins"></i></a><!-- RSS--><!-- 知乎--><!-- 领英--><!-- 脸书--><a title="facebook" target="_blank" rel="noopener nofollow" href="//www.facebook.com//"><i class="iconfont icon-tian7_facebook"></i></a></section><p><span>Copyright ©</span><span> Haojen 2023</span></p><div class="is-flex is-justify-content-center is-flex-wrap-wrap"><p>Powered by Hexo &verbar;&nbsp;</p><p class="is-flex is-justify-content-center"><a title="Hexo theme author" target="_blank" rel="noopener" href="//github.com/haojen">Theme by Haojen&nbsp;</a></p><div style="margin-top: 2px"><a class="github-button" title="github-button" target="_blank" rel="noopener" href="https://github.com/haojen/hexo-theme-Claudia" data-color-scheme="no-preference: light; light: light; dark: dark;" data-show-count="true"></a></div></div><div><span></span></div></footer><script async defer src="https://buttons.github.io/buttons.js"></script><script src="/blog/js/jquery-3.6.1.min.js"></script><script src="/blog/js/jquery-fancybox.min.js"></script><script src="/blog/js/img_zoom.js"></script><script src="/blog/js/post.js"></script></body></html>
