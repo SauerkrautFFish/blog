@@ -4,6 +4,19 @@
   
     
     <entry>
+      <title>无向图求解生成树个数</title>
+      <link href="/blog/2023/04/06/%E6%97%A0%E5%90%91%E5%9B%BE%E6%B1%82%E8%A7%A3%E7%94%9F%E6%88%90%E6%A0%91%E4%B8%AA%E6%95%B0/"/>
+      <url>/blog/2023/04/06/%E6%97%A0%E5%90%91%E5%9B%BE%E6%B1%82%E8%A7%A3%E7%94%9F%E6%88%90%E6%A0%91%E4%B8%AA%E6%95%B0/</url>
+      
+        <content type="html"><![CDATA[<p>本文章着重讲如何<strong>根据无向图计算出它的生成树个数</strong>，但不会讲实现原理，也就是<strong>不会论证</strong>。</p><h2 id="能看懂本文章的基本要求"><a href="#能看懂本文章的基本要求" class="headerlink" title="能看懂本文章的基本要求"></a>能看懂本文章的基本要求</h2><p>0、知道什么是无向图</p><p>1、知道什么是生成树</p><p>2、知道如何根据矩阵算出下三角矩阵</p><p>3、知道余子式</p><h2 id="例题"><a href="#例题" class="headerlink" title="例题"></a>例题</h2><p>假设现在有一个题目，要求计算出该无向图的生成树个数。</p><p><img src="image-20230403222547666.png" alt="image-20230403222547666"></p><p>对于求解无向图生成树个数问题，我们可以分成两类。</p><h3 id="第一类"><a href="#第一类" class="headerlink" title="第一类"></a>第一类</h3><p>也是最简单的一类，即给了你一个完全图，让你求它的生成树个数，我们知道一个**完全图（即每个点和其他点都有边相连）的生成树个数为n^(n-2)**，n为顶点数，所以对于这类问题，直接通过公式算出。</p><h3 id="第二类"><a href="#第二类" class="headerlink" title="第二类"></a>第二类</h3><p>这一类则比较复杂，如果简单点的可能通过肉眼就能判断出来，但是对于上图很难通过肉眼直接判断出生成树的个数到底有多少个，对于这类问题，我们需要使用拉<strong>普拉斯矩阵</strong>(Laplacian matrix)也叫做<strong>基尔霍夫矩阵</strong>（并不可怕，请不要被吓到）。</p><p>拉普拉斯矩阵的定义为<strong>L &#x3D; D - A</strong>，<strong>L的任意余子式即为无向图的生成树个数</strong>。</p><h2 id="拉普拉斯矩阵：L-x3D-D-A"><a href="#拉普拉斯矩阵：L-x3D-D-A" class="headerlink" title="拉普拉斯矩阵：L &#x3D; D - A"></a>拉普拉斯矩阵：L &#x3D; D - A</h2><h3 id="A"><a href="#A" class="headerlink" title="A"></a>A</h3><p>其中A为邻接矩阵，我们以下面截图为例子，第一行为0，1，0，0，0，1，代表的是顶点1和顶点2、顶点6相连的意思。</p><p><img src="image-20230403223212607.png" alt="image-20230403223212607"></p><h3 id="D"><a href="#D" class="headerlink" title="D"></a>D</h3><p>D即把每一列的数字相加，然后把列总和放到对角线上，然后让其他位置变为全0，它也称之为度矩阵，对角线上代表每个顶点的度数。</p><p><img src="image-20230403223125302.png" alt="image-20230403223125302"></p><h3 id="根据公式-L-x3D-D-A"><a href="#根据公式-L-x3D-D-A" class="headerlink" title="根据公式:L &#x3D; D - A"></a>根据公式:L &#x3D; D - A</h3><p><img src="image-20230403222822070.png" alt="image-20230403222822070"></p><h3 id="余子式（我们选择去掉第2行第2列）"><a href="#余子式（我们选择去掉第2行第2列）" class="headerlink" title="余子式（我们选择去掉第2行第2列）"></a>余子式（我们选择去掉第2行第2列）</h3><p><img src="image-20230403223038453.png" alt="image-20230403223038453"></p><h3 id="然后计算出下三角"><a href="#然后计算出下三角" class="headerlink" title="然后计算出下三角"></a>然后计算出下三角</h3><p><img src="image-20230403222147739.png" alt="image-20230403222147739"></p><h3 id="结果"><a href="#结果" class="headerlink" title="结果"></a>结果</h3><p>我们把对角线上的数字相乘后，就能得出该无向图生成树个数为15。</p><h2 id="一些或许有帮助的网址"><a href="#一些或许有帮助的网址" class="headerlink" title="一些或许有帮助的网址"></a>一些或许有帮助的网址</h2><pre><code class="bash">自定义生成图：https://csacademy.com/app/graph_editor/矩阵计算：https://matrixcalc.org/zh/生成树概念+矩阵代码：https://blog.csdn.net/qq_40438165/article/details/88526546拉普拉斯矩阵：https://www.cnblogs.com/pupil-xj/p/11714407.html</code></pre>]]></content>
+      
+      
+      
+    </entry>
+    
+    
+    
+    <entry>
       <title>商业和开源的faas伸缩性比较</title>
       <link href="/blog/2023/04/03/%E5%95%86%E4%B8%9A%E5%92%8C%E5%BC%80%E6%BA%90%E7%9A%84faas%E4%BC%B8%E7%BC%A9%E6%80%A7%E6%AF%94%E8%BE%83/"/>
       <url>/blog/2023/04/03/%E5%95%86%E4%B8%9A%E5%92%8C%E5%BC%80%E6%BA%90%E7%9A%84faas%E4%BC%B8%E7%BC%A9%E6%80%A7%E6%AF%94%E8%BE%83/</url>
